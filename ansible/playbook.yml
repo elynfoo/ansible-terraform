@@ -1,0 +1,64 @@
+- name: Configure Flask server
+  hosts: webservers
+  become: true
+
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: true
+
+    - name: Install Python and pip
+      apt:
+        name:
+          - python3
+          - python3-pip
+          - python3-venv
+        state: present
+
+    - name: Install Flask
+      pip:
+        name: flask
+        state: present
+
+    - name: Create app directory
+      file:
+        path: /opt/flaskapp
+        state: directory
+        mode: '0755'
+
+    - name: Create simple Flask app
+      copy:
+        dest: /opt/flaskapp/app.py
+        content: |
+          from flask import Flask
+          app = Flask(__name__)
+
+          @app.route('/')
+          def home():
+              return '<h1>Hello from Ansible + Terraform!</h1>'
+
+          if __name__ == '__main__':
+              app.run(host='0.0.0.0', port=5000)
+
+    - name: Install Flask app as systemd service
+      copy:
+        dest: /etc/systemd/system/flaskapp.service
+        content: |
+          [Unit]
+          Description=Flask App
+          After=network.target
+
+          [Service]
+          WorkingDirectory=/opt/flaskapp
+          ExecStart=/usr/bin/python3 /opt/flaskapp/app.py
+          Restart=always
+
+          [Install]
+          WantedBy=multi-user.target
+
+    - name: Start and enable Flask service
+      systemd:
+        name: flaskapp
+        state: started
+        enabled: true
+        daemon_reload: true
