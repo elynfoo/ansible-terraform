@@ -72,13 +72,91 @@ Terraform (create) → VM exists → Ansible (configure) → App is running
 
 ```
 ansible-terraform/
+├── app.py               # Flask app — same code Ansible deploys to the VM
+├── requirements.txt     # Python dependencies (flask)
+├── Dockerfile           # Containerizes the Flask app for live demo
 ├── terraform/
 │   ├── main.tf          # Blueprint: what Azure resources to build
 │   ├── variables.tf     # Settings: VM name, location, size, username
 │   └── outputs.tf       # Results: prints VM public IP when done
-└── ansible/
-    ├── inventory.ini    # Address book: VM IP and SSH credentials
-    └── playbook.yml     # Task list: install Python, Flask, start service
+├── ansible/
+│   ├── inventory.ini    # Address book: VM IP and SSH credentials
+│   └── playbook.yml     # Task list: install Python, Flask, start service
+└── k8s/
+    ├── deployment.yaml  # Kubernetes Deployment for the containerized app
+    └── service.yaml     # LoadBalancer Service on port 5001
+```
+
+---
+
+## Live Demo
+
+The same Flask app that Ansible deploys to the VM is also containerized and running on Kubernetes for a live demo:
+
+**<http://40.90.189.161:5001>**
+
+```
+Dockerfile → elynfoo/ansible-terraform-app:latest (Docker Hub)
+        ↓
+AKS LoadBalancer (port 5001, shared IP with flask-portfolio)
+        ↓
+ansible-terraform-app Pod
+        ↓
+Returns: Hello from Ansible + Terraform!
+```
+
+> The VM-based deployment (Terraform + Ansible) is the actual project.
+> The containerized demo shows the same app output via a different delivery method.
+
+---
+
+## Docker Setup
+
+### Dockerfile
+
+```dockerfile
+FROM python:3.12-slim
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+COPY app.py .
+CMD ["python", "app.py"]
+```
+
+### Build and push
+
+```powershell
+docker build -t elynfoo/ansible-terraform-app:latest .
+docker push elynfoo/ansible-terraform-app:latest
+```
+
+---
+
+## Kubernetes Deployment (Live Demo)
+
+Deploys the containerized app to AKS alongside the Flask portfolio.
+Both services share the same public IP (`40.90.189.161`) on different ports:
+
+| Service | Port | URL |
+| --- | --- | --- |
+| flask-portfolio | 5000 | <http://40.90.189.161:5000> |
+| ansible-terraform-app | 5001 | <http://40.90.189.161:5001> |
+
+Sharing one IP avoids the Azure free account public IP limit (`PublicIPCountLimitReached`).
+Done by annotating the service:
+
+```yaml
+annotations:
+  service.beta.kubernetes.io/azure-load-balancer-ipv4: "40.90.189.161"
+```
+
+### Deploy
+
+```powershell
+kubectl apply -f k8s/deployment.yaml
+kubectl apply -f k8s/service.yaml
+kubectl get pods
+kubectl get service ansible-terraform-service
 ```
 
 ---
@@ -205,6 +283,7 @@ Open browser: `http://13.67.71.202:5000`
 | `exec format error` on Terraform auth | Windows `az.exe` in WSL2 PATH | Used `az vm create` directly instead |
 | `Standard_B1s` not available | Capacity restrictions in Southeast Asia | Used `Standard_B2als_v2` |
 | `Basic SKU` public IP limit | Azure for Students restriction | Changed to `Standard` SKU |
+| `PublicIPCountLimitReached` on K8s service | Azure free account limits number of public IPs | Reused existing IP via `azure-load-balancer-ipv4` annotation |
 
 ---
 
@@ -245,3 +324,5 @@ az group delete --name ansible-lab-rg --yes
 - SSH keys are used instead of passwords for server access
 - Systemd keeps services **running automatically** after VM restarts
 - Azure for Students has **SKU restrictions** — not all VM sizes are available
+- Azure free accounts have a **public IP limit** — reuse existing IPs across K8s services using the `azure-load-balancer-ipv4` annotation
+- The same app code can be delivered two ways — directly on a VM (Ansible) or containerized (Docker + K8s) — the output is identical

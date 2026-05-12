@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ansible-terraform-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ansible-terraform-app
+  template:
+    metadata:
+      labels:
+        app: ansible-terraform-app
+    spec:
+      imagePullSecrets:
+        - name: dockerhub-secret
+      containers:
+        - name: ansible-terraform-app
+          image: elynfoo/ansible-terraform-app:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 5000

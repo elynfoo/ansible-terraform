@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: ansible-terraform-service
+  annotations:
+    service.beta.kubernetes.io/azure-load-balancer-ipv4: "40.90.189.161"
+spec:
+  selector:
+    app: ansible-terraform-app
+  ports:
+    - port: 5001
+      targetPort: 5000
+  type: LoadBalancer
